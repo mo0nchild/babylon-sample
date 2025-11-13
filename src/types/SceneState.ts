@@ -7,4 +7,7 @@ export interface SceneNodeState {
   children: number[]; 
 }
 
-export type SceneState = Record<number, SceneNodeState>;
+export type SceneState = {
+  nodes: Record<number, SceneNodeState>,
+  currentState: 'loading' | 'failed' | 'success' | 'empty'
+};

@@ -1,7 +1,7 @@
-type FileLoadedCallback = (file: File) => void
+type FileLoadedCallback = (base64: string) => void
 
 interface FileInputProps {
-  fileLoaded: FileLoadedCallback
+  fileLoaded?: FileLoadedCallback
 }
 
 const FileInput: React.FC<FileInputProps> = ({ fileLoaded }) => {
@@ -13,7 +13,15 @@ const FileInput: React.FC<FileInputProps> = ({ fileLoaded }) => {
       alert('Поддерживаются только .glb файлы');
       return;
     }
-    fileLoaded(file)
+    const arrayBuffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+
+    let binary = '';
+
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    fileLoaded?.(btoa(binary))
   };
 
   return (

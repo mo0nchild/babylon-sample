@@ -1,5 +1,4 @@
-// src/components/BabylonScene.tsx
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   Engine,
   Scene,
@@ -7,33 +6,59 @@ import {
   ArcRotateCamera,
   HemisphericLight,
   Vector3,
-  AppendSceneAsync,
+  LoadAssetContainerAsync,
+  AssetContainer,
 } from '@babylonjs/core';
-import type { SceneState } from '@types/SceneState';
+import type { SceneNodeState, SceneState } from '@./../types/SceneState';
 
-import "@babylonjs/loaders/glTF";
+import { registerBuiltInLoaders } from '@babylonjs/loaders/dynamic';
+registerBuiltInLoaders();
+
+import { useScene } from '@contexts/SceneContext';
 
 interface BabylonScene {
   fileBase64: string | null
 }
 
-const BabylonScene: React.FC<BabylonScene> = ({fileBase64}) => {
+const BabylonScene: React.FC<BabylonScene> = ({ fileBase64 }) => {
+  const { state, dispatch } = useScene();
 
+  const containerRef = useRef<AssetContainer | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<Scene | null>(null);
 
-  const clearScene = () => {
-    if (!sceneRef.current) return;
-
-    sceneRef.current.meshes.forEach((m) => m.dispose());
-    sceneRef.current.materials.forEach((m) => m.dispose());
-    sceneRef.current.textures.forEach((t) => t.dispose());
-  };
-
   useEffect(() => {
+    if (!fileBase64) return;
 
-    
+    const loadModel = async () => {
+      if (!sceneRef.current) return;
+      try {
+        if (containerRef.current) {
+          containerRef.current.removeAllFromScene();
+          containerRef.current.dispose();
+        }
+        const modelUrl = `data:model/gltf-binary;base64,${fileBase64}`;
 
+        containerRef.current = await LoadAssetContainerAsync(modelUrl, sceneRef.current);
+        containerRef.current.addAllToScene();
+        
+        const rootNodes = containerRef.current.getNodes();
+        console.log(rootNodes)
+        dispatch({ type: 'SET_NODES', payload: buildSceneState(rootNodes) });
+
+        console.log('Модель загружена')
+        
+      } catch (error) {
+
+        console.error('Ошибка загрузки модели:', error);
+        alert('Ошибка загрузки модели')
+
+        dispatch({ type: 'CLEAR' });
+      }
+    };
+
+    loadModel();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileBase64])
 
   useEffect(() => {
@@ -53,7 +78,6 @@ const BabylonScene: React.FC<BabylonScene> = ({fileBase64}) => {
     new HemisphericLight('light', new Vector3(0, 1, 0), scene);
 
     sceneRef.current = scene;
-
     engine.runRenderLoop(() => { scene.render() });
 
     const resize = () => engine.resize();
@@ -66,10 +90,22 @@ const BabylonScene: React.FC<BabylonScene> = ({fileBase64}) => {
     };
   }, []);
 
+  useEffect(() => {
+    if (!sceneRef.current) return;
+
+    Object.values(state.nodes).forEach((nodeState) => {
+      const babylonNode = sceneRef.current!.getNodes().find(n => n.uniqueId === nodeState.uniqueId);
+      if (babylonNode) {
+        if (babylonNode.isEnabled() != nodeState.isVisible) {
+          babylonNode.setEnabled(nodeState.isVisible);
+        }
+      }
+    });
+  }, [state]);
+
   return (
     <div style={{ }}>
-      
-      <canvas ref={canvasRef} style={{ width: '300px', height: '300px', display: 'block' }}/>
+      <canvas ref={canvasRef} style={{ width: '500px', height: '500px', display: 'block' }}/>
     </div>
   );
 };
@@ -77,11 +113,14 @@ const BabylonScene: React.FC<BabylonScene> = ({fileBase64}) => {
 export default BabylonScene;
 
 function buildSceneState(nodes: Node[], parentId: number | null = null): SceneState {
-  let state: SceneState = {};
+  let nodesMap: Record<number, SceneNodeState> = { };
+
   for (const node of nodes) {
+
     const id = node.uniqueId;
     const children = node.getChildren ? node.getChildren() : [];
-    state[id] = {
+
+    nodesMap[id] = {
       uniqueId: id,
       name: node.name || '<unnamed>',
       className: node.getClassName(),
@@ -89,9 +128,12 @@ function buildSceneState(nodes: Node[], parentId: number | null = null): SceneSt
       isVisible: node.isEnabled(),
       children: children.map(c => c.uniqueId),
     };
-    // Рекурсия для дочерних узлов
+
     const childState = buildSceneState(children, id);
-    state = { ...state, ...childState };
+    nodesMap = { ...nodesMap, ...childState };
   }
-  return state;
+  return {
+    currentState: 'success',
+    nodes: nodesMap
+  };
 }

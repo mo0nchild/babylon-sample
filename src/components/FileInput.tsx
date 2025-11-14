@@ -1,3 +1,5 @@
+import { useScene } from "@contexts/SceneContext";
+
 type FileLoadedCallback = (base64: string) => void
 
 interface FileInputProps {
@@ -5,6 +7,8 @@ interface FileInputProps {
 }
 
 const FileInput: React.FC<FileInputProps> = ({ fileLoaded }) => {
+  const { dispatch } = useScene()
+
   const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -13,6 +17,8 @@ const FileInput: React.FC<FileInputProps> = ({ fileLoaded }) => {
       alert('Поддерживаются только .glb файлы');
       return;
     }
+
+    // dispatch({ type: 'LOADING' });
     const arrayBuffer = await file.arrayBuffer();
     const bytes = new Uint8Array(arrayBuffer);
 

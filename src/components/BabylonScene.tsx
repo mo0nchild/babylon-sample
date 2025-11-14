@@ -9,7 +9,7 @@ import {
   LoadAssetContainerAsync,
   AssetContainer,
 } from '@babylonjs/core';
-import type { SceneNodeState, SceneState } from '@./../types/SceneState';
+import type { SceneNodeState } from '@./../types/SceneState';
 
 import { registerBuiltInLoaders } from '@babylonjs/loaders/dynamic';
 registerBuiltInLoaders();
@@ -29,22 +29,31 @@ const BabylonScene: React.FC<BabylonScene> = ({ fileBase64 }) => {
 
   useEffect(() => {
     if (!fileBase64) return;
-
     const loadModel = async () => {
       if (!sceneRef.current) return;
+      
+      
+      await new Promise(resolve => setTimeout(resolve, 0));
+        
       try {
         if (containerRef.current) {
           containerRef.current.removeAllFromScene();
           containerRef.current.dispose();
         }
+        await new Promise(resolve => requestAnimationFrame(resolve));
         const modelUrl = `data:model/gltf-binary;base64,${fileBase64}`;
 
         containerRef.current = await LoadAssetContainerAsync(modelUrl, sceneRef.current);
         containerRef.current.addAllToScene();
         
-        const rootNodes = containerRef.current.getNodes();
-        console.log(rootNodes)
-        dispatch({ type: 'SET_NODES', payload: buildSceneState(rootNodes) });
+        const rootNodes = containerRef.current.rootNodes
+        dispatch({ 
+          type: 'SET_NODES', 
+          payload: { 
+            nodes: buildSceneNodes(rootNodes), 
+            currentState: 'success' 
+          } 
+        });
 
         console.log('Модель загружена')
         
@@ -62,13 +71,16 @@ const BabylonScene: React.FC<BabylonScene> = ({ fileBase64 }) => {
   }, [fileBase64])
 
   useEffect(() => {
+    console.log('mount')
+    
     if (!canvasRef.current) return;
+
+    console.log('mounting')
 
     const engine = new Engine(canvasRef.current, true);
     const scene = new Scene(engine);
 
     const camera = new ArcRotateCamera('camera', -Math.PI / 2, Math.PI / 2.5, 5, Vector3.Zero(), scene);
-
     camera.attachControl(canvasRef.current, true);
 
     camera.lowerRadiusLimit = 1;
@@ -78,7 +90,11 @@ const BabylonScene: React.FC<BabylonScene> = ({ fileBase64 }) => {
     new HemisphericLight('light', new Vector3(0, 1, 0), scene);
 
     sceneRef.current = scene;
-    engine.runRenderLoop(() => { scene.render() });
+    engine.runRenderLoop(() => { 
+      if (!engine.isDisposed && !scene.isDisposed) {
+        scene.render();
+      }
+    });
 
     const resize = () => engine.resize();
     window.addEventListener('resize', resize);
@@ -112,7 +128,7 @@ const BabylonScene: React.FC<BabylonScene> = ({ fileBase64 }) => {
 
 export default BabylonScene;
 
-function buildSceneState(nodes: Node[], parentId: number | null = null): SceneState {
+function buildSceneNodes(nodes: Node[], parentId: number | null = null): Record<number, SceneNodeState> {
   let nodesMap: Record<number, SceneNodeState> = { };
 
   for (const node of nodes) {
@@ -129,11 +145,8 @@ function buildSceneState(nodes: Node[], parentId: number | null = null): SceneSt
       children: children.map(c => c.uniqueId),
     };
 
-    const childState = buildSceneState(children, id);
+    const childState = buildSceneNodes(children, id);
     nodesMap = { ...nodesMap, ...childState };
   }
-  return {
-    currentState: 'success',
-    nodes: nodesMap
-  };
+  return nodesMap
 }

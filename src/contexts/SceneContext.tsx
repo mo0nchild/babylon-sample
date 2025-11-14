@@ -4,7 +4,8 @@ import React, { createContext, useContext, useReducer, type ReactNode } from 're
 type SceneAction =
   | { type: 'SET_NODES'; payload: SceneState }
   | { type: 'TOGGLE_VISIBILITY'; payload: number }
-  | { type: 'CLEAR' };
+  | { type: 'CLEAR' }
+  | { type: 'LOADING' }
 
 const initialState: SceneState = {
   currentState: 'empty',
@@ -28,7 +29,10 @@ function sceneReducer(state: SceneState, action: SceneAction): SceneState {
         },
       } as SceneState;
     }
-
+    case 'LOADING': return ({ 
+      nodes: { },
+      currentState: 'loading'
+    } as SceneState);
     case 'CLEAR': return ({ 
       nodes: { },
       currentState: 'empty'

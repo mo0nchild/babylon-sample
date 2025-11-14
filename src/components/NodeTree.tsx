@@ -1,11 +1,13 @@
 import React from 'react';
 import { useScene } from '@contexts/SceneContext';
+import type { SceneNodeState } from './../types/SceneState';
 
 interface TreeNodeProps {
   nodeId: number;
+  onSelect?: (nodeId: number) => void 
 }
 
-const TreeNode: React.FC<TreeNodeProps> = ({ nodeId }) => {
+const TreeNode: React.FC<TreeNodeProps> = ({ nodeId, onSelect }) => {
   const { state, dispatch } = useScene();
   const node = state.nodes[nodeId];
 
@@ -15,14 +17,25 @@ const TreeNode: React.FC<TreeNodeProps> = ({ nodeId }) => {
     dispatch({ type: 'TOGGLE_VISIBILITY', payload: nodeId });
   };
 
+  const isDisabled = isNodeDisabled(nodeId, state.nodes);
+
   return (
     <li style={{ marginBottom: 4, listStyle: 'none' }}>
       <label style={{ display: 'flex', alignItems: 'center' }}>
+        <button 
+          onClick={() => {
+            onSelect?.(node.uniqueId)
+          }}
+          style={{
+            fontSize: '10px',
+            padding: '5px'
+          }}>Выбрать</button>
         <input
           type="checkbox"
           checked={node.isVisible}
           onChange={handleToggle}
           style={{ marginRight: 6 }}
+          disabled={isDisabled}
         />
         <span>
           {node.name} <small style={{ color: '#888' }}>({node.className})</small>
@@ -32,7 +45,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({ nodeId }) => {
       {node.children.length > 0 && (
         <ul style={{ paddingLeft: 16, marginTop: 4, marginBottom: 0 }}>
           {node.children.map((childId) => (
-            <TreeNode key={childId} nodeId={childId} />
+            <TreeNode key={childId} nodeId={childId} onSelect={onSelect} />
           ))}
         </ul>
       )}
@@ -40,7 +53,7 @@ const TreeNode: React.FC<TreeNodeProps> = ({ nodeId }) => {
   );
 };
 
-const NodeTree: React.FC = () => {
+const NodeTree: React.FC<{onSelect?: (nodeId: number) => void}> = ({onSelect}) => {
   const { state } = useScene();
 
   const rootIds = Object.values(state.nodes)
@@ -68,7 +81,7 @@ const NodeTree: React.FC = () => {
       <ul style={{ padding: 0, margin: 0, listStyle: 'none' }}>
         { 
           rootIds.map((id, index) => (
-            <TreeNode key={index} nodeId={id} />
+            <TreeNode key={index} nodeId={id} onSelect={onSelect} />
           )) 
         }
       </ul>
@@ -77,3 +90,24 @@ const NodeTree: React.FC = () => {
 };
 
 export default NodeTree;
+
+function isNodeDisabled(nodeId: number, nodes: Record<number, SceneNodeState>): boolean {
+  const node = nodes[nodeId];
+  if (!node) return false;
+
+  // Если текущий узел — корень (нет родителя)
+  if (node.parentId == null) {
+    return false; // корни никогда не блокируются
+  }
+
+  const parent = nodes[node.parentId];
+  if (!parent) return false;
+
+  // Если родитель скрыт → текущий узел заблокирован
+  if (!parent.isVisible) {
+    return true;
+  }
+
+  // Иначе — проверяем родителя рекурсивно
+  return isNodeDisabled(node.parentId, nodes);
+}

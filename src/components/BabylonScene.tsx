@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Engine,
   Scene,
@@ -8,45 +8,59 @@ import {
   Vector3,
   LoadAssetContainerAsync,
   AssetContainer,
+  MeshBuilder,
+  StandardMaterial,
+  Color3,
+  GizmoManager,
 } from '@babylonjs/core';
 import type { SceneNodeState } from '@./../types/SceneState';
 
-import { registerBuiltInLoaders } from '@babylonjs/loaders/dynamic';
-registerBuiltInLoaders();
+import "@babylonjs/loaders/glTF";
 
 import { useScene } from '@contexts/SceneContext';
 
 interface BabylonScene {
-  fileBase64: string | null
+  modelUrl: string | null,
+  selectedNode: number | null
 }
 
-const BabylonScene: React.FC<BabylonScene> = ({ fileBase64 }) => {
+const BabylonScene: React.FC<BabylonScene> = ({ modelUrl, selectedNode }) => {
   const { state, dispatch } = useScene();
+  const [sceneReady, setSceneReady] = useState(false);
 
   const containerRef = useRef<AssetContainer | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<Scene | null>(null);
+  const gizmoManagerRef = useRef<GizmoManager | null>(null);
 
   useEffect(() => {
-    if (!fileBase64) return;
+    if (!modelUrl || !sceneReady) return;
+    
     const loadModel = async () => {
       if (!sceneRef.current) return;
-      
-      
-      await new Promise(resolve => setTimeout(resolve, 0));
-        
+      dispatch({ type: 'LOADING' })
       try {
+
         if (containerRef.current) {
+
           containerRef.current.removeAllFromScene();
           containerRef.current.dispose();
-        }
-        await new Promise(resolve => requestAnimationFrame(resolve));
-        const modelUrl = `data:model/gltf-binary;base64,${fileBase64}`;
 
-        containerRef.current = await LoadAssetContainerAsync(modelUrl, sceneRef.current);
+        }
+
+        containerRef.current = await LoadAssetContainerAsync(
+          modelUrl, 
+          sceneRef.current
+        );
+
+        console.log('Meshes loaded:', containerRef.current.meshes.length);
         containerRef.current.addAllToScene();
         
         const rootNodes = containerRef.current.rootNodes
+        if (gizmoManagerRef.current && rootNodes.length > 0) {
+          gizmoManagerRef.current.attachToNode(rootNodes[0])
+        }
+
         dispatch({ 
           type: 'SET_NODES', 
           payload: { 
@@ -54,7 +68,7 @@ const BabylonScene: React.FC<BabylonScene> = ({ fileBase64 }) => {
             currentState: 'success' 
           } 
         });
-
+        
         console.log('Модель загружена')
         
       } catch (error) {
@@ -66,16 +80,23 @@ const BabylonScene: React.FC<BabylonScene> = ({ fileBase64 }) => {
       }
     };
 
-    loadModel();
+    loadModel().then(() => sceneRef.current?.getEngine().resize());
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fileBase64])
+  }, [modelUrl, sceneReady])
 
   useEffect(() => {
-    console.log('mount')
-    
-    if (!canvasRef.current) return;
+    if (!sceneRef.current || !gizmoManagerRef.current || !containerRef.current) return;
+    const node = containerRef.current
+      .getNodes()
+      .find(n => n.uniqueId == selectedNode)
+    if (node) {
+      gizmoManagerRef.current.attachToNode(node)
+    }
+  }, [selectedNode])
 
-    console.log('mounting')
+  useEffect(() => {
+    if (!canvasRef.current) return;
 
     const engine = new Engine(canvasRef.current, true);
     const scene = new Scene(engine);
@@ -89,20 +110,43 @@ const BabylonScene: React.FC<BabylonScene> = ({ fileBase64 }) => {
 
     new HemisphericLight('light', new Vector3(0, 1, 0), scene);
 
+    const ground = MeshBuilder.CreateGround("grid", { width: 20, height: 20, subdivisions: 20 }, scene);
+    const gridMat = new StandardMaterial("gridMat", scene);
+
+    gridMat.wireframe = true;
+    gridMat.emissiveColor = new Color3(0.5, 0.5, 0.5);
+    ground.material = gridMat;
+    ground.position.y = 0; 
+
+    const gizmoManager = new GizmoManager(scene);
+    gizmoManager.positionGizmoEnabled = true; 
+    gizmoManager.rotationGizmoEnabled = true; 
+    gizmoManager.scaleGizmoEnabled = false;
+    gizmoManager.usePointerToAttachGizmos = false;
+    gizmoManagerRef.current = gizmoManager;
+
     sceneRef.current = scene;
+    setSceneReady(true);
+
     engine.runRenderLoop(() => { 
       if (!engine.isDisposed && !scene.isDisposed) {
         scene.render();
       }
     });
-
-    const resize = () => engine.resize();
+    
+    const resize = () => engine.resize()
     window.addEventListener('resize', resize);
-
+    setTimeout(() => {
+      engine.resize();
+    }, 0);
     return () => {
+      setSceneReady(false);
+
       window.removeEventListener('resize', resize);
+      
       scene.dispose();
       engine.dispose();
+      gizmoManager.dispose();
     };
   }, []);
 
@@ -120,8 +164,8 @@ const BabylonScene: React.FC<BabylonScene> = ({ fileBase64 }) => {
   }, [state]);
 
   return (
-    <div style={{ }}>
-      <canvas ref={canvasRef} style={{ width: '500px', height: '500px', display: 'block' }}/>
+    <div style={{ border: '1px solid #ccc'}}>
+      <canvas ref={canvasRef} style={{ width: '728px', height: '480px' }} />
     </div>
   );
 };

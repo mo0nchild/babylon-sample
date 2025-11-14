@@ -13,21 +13,16 @@ const FileInput: React.FC<FileInputProps> = ({ fileLoaded }) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!file.name.toLowerCase().endsWith('.glb')) {
-      alert('Поддерживаются только .glb файлы');
-      return;
-    }
-
-    // dispatch({ type: 'LOADING' });
-    const arrayBuffer = await file.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuffer);
-
-    let binary = '';
-
-    for (let i = 0; i < bytes.length; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    fileLoaded?.(btoa(binary))
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      fileLoaded?.(result);
+    };
+    reader.onerror = () => {
+      alert('Ошибка чтения файла');
+      dispatch({ type: 'CLEAR' });
+    };
+    reader.readAsDataURL(file)
   };
 
   return (
@@ -37,12 +32,8 @@ const FileInput: React.FC<FileInputProps> = ({ fileLoaded }) => {
 export default FileInput
 
 const fileInputStyles: React.CSSProperties = {
-  position: 'absolute',
-  top: 10,
-  left: 10,
-  zIndex: 1000,
   padding: '6px 10px',
-  backgroundColor: '#fff',
+  backgroundColor: '#2e2c2cff',
   border: '1px solid #ccc',
   borderRadius: 4,
   cursor: 'pointer',

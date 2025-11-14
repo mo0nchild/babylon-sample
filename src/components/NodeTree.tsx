@@ -93,21 +93,15 @@ export default NodeTree;
 
 function isNodeDisabled(nodeId: number, nodes: Record<number, SceneNodeState>): boolean {
   const node = nodes[nodeId];
-  if (!node) return false;
-
-  // Если текущий узел — корень (нет родителя)
-  if (node.parentId == null) {
-    return false; // корни никогда не блокируются
-  }
+  
+  if (!node || node.parentId == null) return false;
 
   const parent = nodes[node.parentId];
   if (!parent) return false;
 
-  // Если родитель скрыт → текущий узел заблокирован
   if (!parent.isVisible) {
     return true;
   }
 
-  // Иначе — проверяем родителя рекурсивно
   return isNodeDisabled(node.parentId, nodes);
 }
